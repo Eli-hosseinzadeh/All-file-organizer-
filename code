@@ -1,0 +1,126 @@
+"""
+main.py
+-------
+Application entry point. This file implements the Command-Line Interface (CLI),
+allowing users to interact with the project directly from the terminal without
+writing any code.
+
+Example usage:
+    python main.py organize ~/Downloads
+    python main.py duplicates ~/Downloads
+    python main.py large ~/Downloads --min-size 2
+    python main.py old ~/Downloads --days 90
+    python main.py gui
+"""
+
+import argparse
+import sys
+
+from organizer import FileOrganizer
+from utils import human_readable_size
+
+
+def cmd_organize(args):
+    organizer = FileOrganizer(args.folder)
+    report = organizer.organize(use_ai_guess=not args.no_ai)
+
+    print("\n=== Organization Report ===")
+    print(f"Files moved      : {report['moved_files']}")
+    print(f"Folders created  : {report['created_folders']} ({', '.join(report['folders']) or '-'})")
+    if report["errors"]:
+        print(f"Errors: {len(report['errors'])} file(s) could not be moved:")
+        for err in report["errors"]:
+            print(f"  - {err}")
+
+
+def cmd_duplicates(args):
+    organizer = FileOrganizer(args.folder)
+    duplicates = organizer.find_duplicates()
+
+    if not duplicates:
+        print("No duplicate files found.")
+        return
+
+    print(f"\n=== {len(duplicates)} duplicate file group(s) found ===")
+    for i, group in enumerate(duplicates, start=1):
+        print(f"\nGroup {i}:")
+        for path in group:
+            print(f"  - {path}")
+
+
+def cmd_large(args):
+    organizer = FileOrganizer(args.folder)
+    large_files = organizer.find_large_files(min_size_gb=args.min_size)
+
+    if not large_files:
+        print(f"No files larger than {args.min_size} GB were found.")
+        return
+
+    print(f"\n=== {len(large_files)} file(s) larger than {args.min_size} GB ===")
+    for f in large_files:
+        print(f"  {human_readable_size(f['size_bytes']):>10}  {f['path']}")
+
+
+def cmd_old(args):
+    organizer = FileOrganizer(args.folder)
+    old_files = organizer.find_old_files(older_than_days=args.days)
+
+    if not old_files:
+        print(f"No files older than {args.days} days were found.")
+        return
+
+    print(f"\n=== {len(old_files)} file(s) older than {args.days} days ===")
+    for f in old_files:
+        print(f"  {f['age_days']:>4} days   {f['path']}")
+
+
+def cmd_gui(args):
+    from gui import launch_gui
+    launch_gui()
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="AI File Organizer",
+        description="A tool for automatically organizing your Downloads folder (or any other folder).",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    p_organize = subparsers.add_parser("organize", help="Organize files by their type")
+    p_organize.add_argument("folder", help="Path to the folder to organize")
+    p_organize.add_argument("--no-ai", action="store_true", help="Disable smart classification for unknown files")
+    p_organize.set_defaults(func=cmd_organize)
+
+    p_dup = subparsers.add_parser("duplicates", help="Find duplicate files")
+    p_dup.add_argument("folder", help="Path to the folder to scan")
+    p_dup.set_defaults(func=cmd_duplicates)
+
+    p_large = subparsers.add_parser("large", help="List files larger than a specified size")
+    p_large.add_argument("folder", help="Path to the folder to scan")
+    p_large.add_argument("--min-size", type=float, default=1.0, help="Minimum file size in GB (default: 1)")
+    p_large.set_defaults(func=cmd_large)
+
+    p_old = subparsers.add_parser("old", help="List files older than a specified age")
+    p_old.add_argument("folder", help="Path to the folder to scan")
+    p_old.add_argument("--days", type=int, default=182, help="Minimum age in days (default: 182 ≈ 6 months)")
+    p_old.set_defaults(func=cmd_old)
+
+    p_gui = subparsers.add_parser("gui", help="Launch the Tkinter graphical interface")
+    p_gui.set_defaults(func=cmd_gui)
+
+    return parser
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+
+    try:
+        args.func(args)
+    except (FileNotFoundError, NotADirectoryError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
