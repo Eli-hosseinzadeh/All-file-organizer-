@@ -1,0 +1,6 @@
+# This project uses only Python's standard library
+# (pathlib, shutil, os, hashlib, tkinter, argparse, logging).
+# Therefore, no external packages are required.
+#
+# Simply install Python 3.10 or later
+# (required for modern type hints such as `str | None`).
